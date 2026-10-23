@@ -41,6 +41,10 @@ jobs:
       - name: Verify AWS identity
         run: aws sts get-caller-identity
 
+      - name: Test S3 List Permissions
+        run: |
+          aws s3 ls s3://payments-poc-bucket/scripts/
+
       - name: Upload versioned scripts
         run: |
           RELEASE="${GITHUB_SHA}"

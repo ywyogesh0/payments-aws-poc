@@ -7,8 +7,6 @@ The solution demonstrates how payment transactions can be ingested from CSV file
 
 The architecture follows the **Medallion Architecture** pattern and incorporates event-driven processing, data quality, deduplication, idempotency, quarantine handling, retries and observability.
 
-> **Current status:** Source-to-Bronze ingestion has been successfully tested. The Bronze-to-Silver Lambda trigger executes but is blocked from starting AWS Glue by an AWS Organizations Service Control Policy (SCP). The Silver transformation and end-to-end automation require further validation.
-
 ---
 
 ## 1. Architecture Overview
@@ -593,15 +591,6 @@ s3://payments-poc-bucket/silver/payment_events/
 - Integration with AWS Glue Data Catalog.
 - Query access through Amazon Athena.
 
-### Existing schema compatibility
-
-The original PoC used an event-oriented schema containing `event_id`, `merchant_id` and `event_time`.
-
-The current six-column source produces a different Silver schema.
-
-Existing Iceberg tables must be reviewed before running the new transformation. A separate test database or table is recommended if the original tables need to be preserved.
-
----
 
 ## 10. Quarantine Iceberg Table
 
@@ -757,61 +746,6 @@ The Glue job execution role needs permissions for:
 
 Access should be restricted to the necessary resources wherever practical.
 
----
-
-## 13. AWS Organizations SCP Restriction
-
-### Current blocker
-
-Lambda 2 reaches the AWS Glue API but receives:
-
-```text
-AccessDeniedException
-
-User:
-arn:aws:sts::791070062488:assumed-role/
-PaymentsBronzeToSilverTriggerRole/
-payments-bronze-to-silver-trigger
-
-Action:
-glue:StartJobRun
-
-Resource:
-arn:aws:glue:us-east-1:791070062488:
-job/payments-bronze-to-silver
-
-Reason:
-Explicit deny in a Service Control Policy
-```
-
-### Denying policy
-
-```text
-SCP ID: p-n59e2stg
-Organization ID: o-t3xh2zdrdz
-```
-
-### Root cause
-
-AWS Organizations Service Control Policies restrict the maximum permissions available to principals in member accounts.
-
-An explicit deny in an applicable SCP overrides an IAM allow.
-
-Therefore, attaching additional IAM permissions to the Lambda execution role does not resolve the restriction.
-
-### Resolution
-
-An authorized AWS Organizations administrator must review the applicable SCP and determine whether a narrowly scoped exception for the Glue job invocation is appropriate.
-
-### Temporary testing approach
-
-The Glue job may be run manually from the AWS Console if the console identity is authorized.
-
-This allows independent testing of the Bronze-to-Silver transformation while the automated trigger remains blocked.
-
-The SCP should not be bypassed through alternative identities or services without organizational approval.
-
----
 
 ## 14. Observability and CloudWatch
 
@@ -1036,52 +970,6 @@ Glue starts successfully but the job fails later. Lambda may already have acknow
 
 A separate Glue completion monitoring and recovery mechanism is required.
 
----
-
-## 18. Deployment Checklist
-
-### Source ingestion
-
-- [x] Create S3 bucket.
-- [x] Configure Source prefix.
-- [x] Create source SQS queue.
-- [x] Configure source DLQ.
-- [x] Create Lambda 1.
-- [x] Configure Lambda 1 IAM permissions.
-- [x] Configure S3-to-SQS notification.
-- [x] Test valid CSV routing to Bronze.
-- [x] Test invalid CSV routing to Rejected.
-
-### Bronze-to-Silver orchestration
-
-- [x] Create Bronze SQS queue.
-- [x] Configure Bronze DLQ.
-- [x] Create Lambda 2.
-- [x] Configure CloudWatch logging.
-- [x] Verify Lambda 2 reaches the Glue API.
-- [ ] Resolve the AWS Organizations SCP restriction.
-- [ ] Verify successful automated Glue job invocation.
-
-### Silver processing
-
-- [ ] Confirm the final six-column CSV data contract.
-- [ ] Deploy and test the updated Glue PySpark script.
-- [ ] Verify Silver Iceberg table schema compatibility.
-- [ ] Test payment validation.
-- [ ] Test deduplication.
-- [ ] Test incremental MERGE.
-- [ ] Test quarantine MERGE.
-- [ ] Verify sequential replay behaviour.
-
-### Gold and analytics
-
-- [ ] Update Gold transformations for the new Silver schema.
-- [ ] Validate Gold metrics.
-- [ ] Run Athena reconciliation queries.
-- [ ] Add Glue job failure monitoring.
-- [ ] Complete the end-to-end demonstration.
-
----
 
 ## 19. Production Improvements
 
@@ -1161,40 +1049,3 @@ This PoC demonstrates:
 - Observability and operational recovery.
 
 ---
-
-## 21. Current Project Status
-
-| Component | Status |
-|---|---|
-| S3 Source | Working |
-| SQS Source Events | Working |
-| Lambda 1 Schema Validator | Working |
-| Bronze CSV Storage | Working |
-| Rejected CSV Routing | Working |
-| Lambda 2 Execution | Working |
-| Lambda 2 → Glue StartJobRun | Blocked by SCP |
-| Glue Bronze-to-Silver Transformation | Pending validation |
-| Silver Iceberg MERGE | Pending validation |
-| Quarantine Iceberg | Pending validation |
-| Gold Transformation | Requires schema update |
-| Athena Analytics | Pending revised-pipeline validation |
-| End-to-End Automation | Not yet complete |
-
-## 22. Conclusion
-
-The AWS Payments Lakehouse PoC establishes an event-driven foundation for payment data ingestion and transformation.
-
-The successfully tested Source-to-Bronze pipeline demonstrates asynchronous file ingestion, schema validation, error routing and SQS-backed processing.
-
-The next milestone is to resolve the AWS Organizations restriction on `glue:StartJobRun`, validate the updated six-column Bronze-to-Silver Glue transformation, and complete the Silver and Gold analytical layers.
-
-The architecture provides a practical foundation for exploring scalable payments data engineering, data quality, replay, idempotency, Apache Iceberg and serverless analytics on AWS.
-
----
-
-**Project:** AWS Payments Lakehouse PoC  
-**Cloud:** Amazon Web Services  
-**Architecture:** Event-Driven Medallion Lakehouse  
-**Primary Languages:** Python, PySpark, SQL  
-**Table Format:** Apache Iceberg  
-**Status:** In Development
